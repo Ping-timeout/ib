@@ -6,11 +6,7 @@ on:
       builder_url:
         description: 'Image Builder URL (.tar.zst or .tar.xz)'
         required: true
-        # Default removed: You will paste the fresh link here every time
-      profile:
-        description: 'Target Profile'
-        required: true
-        default: 'generic'
+        # Paste the fresh link here every time
       packages:
         description: 'Packages to include/exclude'
         required: true
@@ -33,7 +29,6 @@ jobs:
       # --- HASHING FOR CACHE ---
       - name: Generate Cache Keys
         run: |
-          # Create unique IDs based on your URL and Packages so the cache knows when to update
           echo "URL_HASH=$(echo -n '${{ github.event.inputs.builder_url }}' | sha256sum | awk '{print $1}')" >> $GITHUB_ENV
           echo "PKG_HASH=$(echo -n '${{ github.event.inputs.packages }}' | sha256sum | awk '{print $1}')" >> $GITHUB_ENV
 
@@ -61,7 +56,6 @@ jobs:
         with:
           path: imagebuilder/dl
           key: packages-${{ env.URL_HASH }}-${{ env.PKG_HASH }}
-          # If an exact package match isn't found, restore the closest match from the same URL
           restore-keys: |
             packages-${{ env.URL_HASH }}-
 
@@ -77,9 +71,9 @@ jobs:
       - name: Build Firmware
         working-directory: ./imagebuilder
         run: |
-          # ROOTFS_PARTSIZE is now hardcoded to 800 below
+          # PROFILE and ROOTFS_PARTSIZE are now hardcoded
           make image \
-            PROFILE="${{ github.event.inputs.profile }}" \
+            PROFILE="generic" \
             PACKAGES="${{ github.event.inputs.packages }}" \
             ROOTFS_PARTSIZE="800"
 
