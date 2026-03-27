@@ -1,0 +1,90 @@
+name: Build ImmortalWrt x86_64
+
+on:
+  workflow_dispatch:
+    inputs:
+      builder_url:
+        description: 'Image Builder URL (.tar.zst or .tar.xz)'
+        required: true
+        # Default removed: You will paste the fresh link here every time
+      profile:
+        description: 'Target Profile'
+        required: true
+        default: 'generic'
+      packages:
+        description: 'Packages to include/exclude'
+        required: true
+        default: 'kmod-amazon-ena kmod-amd-xgbe kmod-bnx2 kmod-drm-i915 kmod-dwmac-intel kmod-e1000 kmod-forcedeth kmod-fs-vfat kmod-tg3 luci-i18n-zerotier-zh-cn luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn curl findutils-locate findutils-find'
+
+jobs:
+  build:
+    name: Build via Image Builder
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 python3-distutils zstd make bzip2
+
+      # --- HASHING FOR CACHE ---
+      - name: Generate Cache Keys
+        run: |
+          # Create unique IDs based on your URL and Packages so the cache knows when to update
+          echo "URL_HASH=$(echo -n '${{ github.event.inputs.builder_url }}' | sha256sum | awk '{print $1}')" >> $GITHUB_ENV
+          echo "PKG_HASH=$(echo -n '${{ github.event.inputs.packages }}' | sha256sum | awk '{print $1}')" >> $GITHUB_ENV
+
+      # --- CACHE 1: The Image Builder Archive ---
+      - name: Cache Image Builder Archive
+        id: cache-builder
+        uses: actions/cache@v4
+        with:
+          path: imagebuilder-archive
+          key: builder-${{ env.URL_HASH }}
+
+      - name: Download Image Builder (If not cached)
+        if: steps.cache-builder.outputs.cache-hit != 'true'
+        run: |
+          wget -qO imagebuilder-archive "${{ github.event.inputs.builder_url }}"
+
+      - name: Extract Image Builder
+        run: |
+          tar -xf imagebuilder-archive
+          mv immortalwrt-imagebuilder-*/ imagebuilder
+
+      # --- CACHE 2: The Downloaded Packages (.ipk files) ---
+      - name: Cache Downloaded Packages
+        uses: actions/cache@v4
+        with:
+          path: imagebuilder/dl
+          key: packages-${{ env.URL_HASH }}-${{ env.PKG_HASH }}
+          # If an exact package match isn't found, restore the closest match from the same URL
+          restore-keys: |
+            packages-${{ env.URL_HASH }}-
+
+      - name: Disable Unnecessary Image Formats (Optional)
+        working-directory: ./imagebuilder
+        run: |
+          sed -i 's/CONFIG_ISO_IMAGES=y/# CONFIG_ISO_IMAGES=y/' .config
+          sed -i 's/CONFIG_QCOW2_IMAGES=y/# CONFIG_QCOW2_IMAGES=y/' .config
+          sed -i 's/CONFIG_VDI_IMAGES=y/# CONFIG_VDI_IMAGES=y/' .config
+          sed -i 's/CONFIG_VMDK_IMAGES=y/# CONFIG_VMDK_IMAGES=y/' .config
+          sed -i 's/CONFIG_VHDX_IMAGES=y/# CONFIG_VHDX_IMAGES=y/' .config
+
+      - name: Build Firmware
+        working-directory: ./imagebuilder
+        run: |
+          # ROOTFS_PARTSIZE is now hardcoded to 800 below
+          make image \
+            PROFILE="${{ github.event.inputs.profile }}" \
+            PACKAGES="${{ github.event.inputs.packages }}" \
+            ROOTFS_PARTSIZE="800"
+
+      - name: Organize & Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImmortalWrt_x86_64_Firmware
+          path: ./imagebuilder/bin/targets/*/*/*
