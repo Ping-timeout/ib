@@ -1,0 +1,75 @@
+name: Build ImmortalWrt ramips-mt7620
+
+on:
+  workflow_dispatch:
+    inputs:
+      builder_url:
+        description: 'Image Builder URL (.tar.zst or .tar.xz)'
+        required: true
+      profile:
+        description: 'Target Profile (e.g., xiaomi_miwifi-mini)'
+        required: true
+      packages:
+        description: 'Packages to include/exclude'
+        required: true
+        default: 'luci-i18n-zerotier-zh-cn luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn curl findutils-locate findutils-find'
+
+jobs:
+  build:
+    name: Build ramips mt7620
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt update -y
+          sudo apt install -y build-essential libncurses-dev zlib1g-dev gawk git gettext libssl-dev xsltproc rsync wget unzip python3 python3-distutils zstd make bzip2
+
+      # --- HASHING FOR CACHE ---
+      - name: Generate Cache Keys
+        run: |
+          echo "URL_HASH=$(echo -n '${{ github.event.inputs.builder_url }}' | sha256sum | awk '{print $1}')" >> $GITHUB_ENV
+          echo "PKG_HASH=$(echo -n '${{ github.event.inputs.packages }}' | sha256sum | awk '{print $1}')" >> $GITHUB_ENV
+
+      # --- CACHE 1: Image Builder Archive ---
+      - name: Cache Image Builder Archive
+        id: cache-builder
+        uses: actions/cache@v4
+        with:
+          path: imagebuilder-archive
+          key: builder-ramips-${{ env.URL_HASH }}
+
+      - name: Download Image Builder (If not cached)
+        if: steps.cache-builder.outputs.cache-hit != 'true'
+        run: |
+          wget -qO imagebuilder-archive "${{ github.event.inputs.builder_url }}"
+
+      - name: Extract Image Builder
+        run: |
+          tar -xf imagebuilder-archive
+          mv immortalwrt-imagebuilder-*/ imagebuilder
+
+      # --- CACHE 2: Downloaded Packages ---
+      - name: Cache Downloaded Packages
+        uses: actions/cache@v4
+        with:
+          path: imagebuilder/dl
+          key: packages-ramips-${{ env.URL_HASH }}-${{ env.PKG_HASH }}
+          restore-keys: |
+            packages-ramips-${{ env.URL_HASH }}-
+
+      - name: Build Firmware
+        working-directory: ./imagebuilder
+        run: |
+          make image \
+            PROFILE="${{ github.event.inputs.profile }}" \
+            PACKAGES="${{ github.event.inputs.packages }}"
+
+      - name: Organize & Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.inputs.profile }}
+          path: ./imagebuilder/bin/targets/*/*/*
