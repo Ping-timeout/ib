@@ -10,7 +10,7 @@ on:
       packages:
         description: 'Packages to include/exclude'
         required: true
-        default: 'kmod-amazon-ena kmod-amd-xgbe kmod-bnx2 kmod-drm-i915 kmod-dwmac-intel kmod-e1000 kmod-forcedeth kmod-fs-vfat kmod-tg3 luci-i18n-zerotier-zh-cn luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn curl findutils-locate findutils-find'
+        default: 'luci-i18n-zerotier-zh-cn luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn curl findutils-locate findutils-find'
 
 jobs:
   build:
