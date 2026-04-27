@@ -12,7 +12,7 @@ on:
       packages:
         description: 'Packages to include/exclude'
         required: true
-        default: 'luci-i18n-zerotier-zh-cn luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn curl findutils-locate findutils-find'
+        default: 'luci-i18n-zerotier-zh-cn luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn curl findutils-locate findutils-find iperf3'
 
 jobs:
   build:
